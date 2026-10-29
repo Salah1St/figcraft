@@ -68,6 +68,22 @@ FIGCRAFT_DEFAULT_SERVER=wss://design.example.org/ cargo build --release -p figcr
 The release workflow leaves it unset. The public server's terms are in
 [`online-sharing-terms.md`](online-sharing-terms.md).
 
+## The default font
+
+New text starts in Inter (`figcraft_doc::DEFAULT_FONT`). A distribution whose users mostly write a
+script Inter lacks (Thai, say) can name another family with `FIGCRAFT_DEFAULT_FONT` when building;
+unset or empty means Inter. Pick a family the build embeds from craft-fonts (the web build has no
+other fonts) or one its users have installed:
+
+```sh
+FIGCRAFT_DEFAULT_FONT="Noto Sans Thai" cargo build --release -p figcraft
+```
+
+Files record each text's family, so the variable only changes what new text starts in: a file
+saved by one build keeps its fonts in a build with another default. Like any other family, it
+renders only where it is available (embedded or installed); elsewhere the text falls back to the
+faces that are. The release workflow leaves it unset.
+
 ## What gets built
 
 | Platform | Artifacts | Built on |
@@ -101,16 +117,17 @@ builds with `CRAFT_FONTS_DIR` and `CRAFT_FONTS_REQUIRED=1`, so releases embed it
 rather than ship without them. The browser has no system fonts, so a web build without craft-fonts
 can't draw text.
 `crates/text/build.rs` reads both `fonts/manifest.txt` and `fonts/latin-manifest.txt`, so the pin
-must be a commit that has the Latin manifest (today `4391305`, on craft-fonts'
-`pr/latin-presentation-fonts` branch; re-pin to `main` once that lands). That commit has no
-Noto Sans Georgian (craft-fonts' main has it but no Latin manifest), so desktop Georgian uses an
-installed font; re-pin when one commit has both (craft-fonts#42). The web build embeds only Inter,
-Noto Sans Georgian and the Archivo SemiBold wordmark, when the pin has them. A distribution
-whose users write another script names the manifest families it needs, comma-separated, in
-`FIGCRAFT_WEB_FONTS`, building with a craft-fonts checkout that has them (Noto Sans Thai is on
-craft-fonts' main, not yet in the release pin): `FIGCRAFT_WEB_FONTS="Noto Sans Thai" trunk build
---release`. A named family the build doesn't embed gets a warning. Each one adds its size to the
-wasm, which must stay under the 24 MiB gate. Packages carry each embedded font's licence as `OFL-<family>.txt`
+must combine the Latin presentation catalog and the current core UI faces. Required web builds
+validate the emitted Inter Regular/SemiBold and Noto Sans Georgian Regular faces after filtering;
+a missing required face, style or asset fails the required web build. Excluded Adobe rows
+are skipped before resolving their asset paths.
+Native builds retain the permitted Latin presentation faces. Source Sans 3 and Source Serif 4
+are filtered on every target under FigCraft's asset policy. The web build keeps its smaller
+allowlist: Inter, Noto Sans Georgian and Archivo SemiBold when supplied. A distribution whose
+users write another script adds the manifest families it needs, comma-separated, with
+`FIGCRAFT_WEB_FONTS` (`FIGCRAFT_WEB_FONTS="Noto Sans Thai" trunk build --release`); a named family
+the build doesn't embed gets a warning, and each one adds its size to the wasm, which must stay
+under the 24 MiB gate. Packages carry each embedded font's licence as `OFL-<family>.txt`
 (`copy_font_licences` in `packaging/env.sh`; `Contents/Resources/Licenses` in the macOS app).
 
 ### macOS
@@ -181,7 +198,7 @@ tar -xzf figcraft-<v>-freebsd-x86_64.tar.gz --strip-components 1 -C /usr/local
 ### Web
 
 `packaging/web/package.sh` runs `trunk build --release` in `apps/figcraft-web` (`Trunk.toml`:
-`public_url = "./"`, output `dist/web`), fails if a `.wasm` exceeds 24 MiB, and zips the site
+`public_url = "./"`, output `dist/web`), fails if a `.wasm` exceeds 25 MiB minus 512 KiB, and zips the site
 with sample `_headers`/`.htaccess` and the hosting guide. The app uses WebGPU with a WebGL2
 fallback; `?webgl` forces WebGL2. 0.1.0: wasm 17.7 MiB raw, 6.7 MiB gzip, 4.4 MiB Brotli.
 
